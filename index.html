@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FileVault — Python File Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0c0c0f;
+    --surface: #131318;
+    --surface2: #1a1a22;
+    --surface3: #22222d;
+    --border: rgba(255,255,255,0.07);
+    --border-hover: rgba(255,255,255,0.14);
+    --accent: #7c6af5;
+    --accent2: #a78bfa;
+    --accent-glow: rgba(124,106,245,0.18);
+    --green: #34d399;
+    --green-bg: rgba(52,211,153,0.1);
+    --red: #f87171;
+    --red-bg: rgba(248,113,113,0.1);
+    --amber: #fbbf24;
+    --amber-bg: rgba(251,191,36,0.1);
+    --text: #f0eff8;
+    --text-muted: #7b7a8e;
+    --text-dim: #4a4960;
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+
+  /* NOISE OVERLAY */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* GLOW BLOBS */
+  .blob {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .blob-1 { width: 600px; height: 600px; background: rgba(124,106,245,0.12); top: -200px; left: -200px; }
+  .blob-2 { width: 400px; height: 400px; background: rgba(52,211,153,0.06); bottom: -100px; right: -100px; }
+
+  /* LAYOUT */
+  .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; position: relative; z-index: 1; }
+
+  /* SIDEBAR */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+
+  .logo {
+    padding: 28px 24px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo-mark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .logo-text { font-family: var(--font-display); font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+  .logo-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; letter-spacing: 0.5px; text-transform: uppercase; }
+
+  .nav { padding: 20px 14px; flex: 1; }
+  .nav-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-dim); padding: 0 10px; margin-bottom: 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-muted);
+    transition: all 0.15s ease;
+    margin-bottom: 2px;
+    border: 1px solid transparent;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active {
+    background: var(--accent-glow);
+    color: var(--accent2);
+    border-color: rgba(124,106,245,0.2);
+    font-weight: 500;
+  }
+  .nav-item .icon { font-size: 15px; width: 18px; text-align: center; }
+  .nav-badge {
+    margin-left: auto;
+    background: var(--surface3);
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-family: var(--font-mono);
+  }
+  .nav-item.active .nav-badge { background: rgba(124,106,245,0.2); color: var(--accent2); }
+
+  .sidebar-footer {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .storage-bar-wrap { margin-bottom: 8px; }
+  .storage-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .storage-bar { height: 4px; background: var(--surface3); border-radius: 99px; overflow: hidden; }
+  .storage-fill { height: 100%; width: 38%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 99px; }
+
+  /* MAIN */
+  .main { display: flex; flex-direction: column; min-height: 100vh; }
+
+  .topbar {
+    background: rgba(19,19,24,0.7);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 28px;
+    display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .topbar-title { font-family: var(--font-display); font-size: 16px; font-weight: 700; flex: 1; }
+  .search-wrap { display: flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 14px; flex: 1; max-width: 300px; }
+  .search-wrap input { background: none; border: none; outline: none; color: var(--text); font-family: var(--font-body); font-size: 13px; width: 100%; }
+  .search-wrap input::placeholder { color: var(--text-dim); }
+  .search-icon { color: var(--text-dim); font-size: 13px; }
+
+  /* CONTENT */
+  .content { padding: 28px; flex: 1; }
+
+  /* ACTION TABS */
+  .action-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .action-tab {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .action-tab::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .action-tab:hover { border-color: var(--border-hover); transform: translateY(-1px); }
+  .action-tab.active { border-color: rgba(124,106,245,0.4); background: var(--surface2); }
+  .action-tab.active::after { background: var(--accent-glow); opacity: 1; }
+  .action-tab.t-create.active { border-color: rgba(52,211,153,0.35); }
+  .action-tab.t-create.active::after { background: rgba(52,211,153,0.07); }
+  .action-tab.t-read.active { border-color: rgba(124,106,245,0.35); }
+  .action-tab.t-update.active { border-color: rgba(251,191,36,0.35); }
+  .action-tab.t-update.active::after { background: rgba(251,191,36,0.07); }
+  .action-tab.t-delete.active { border-color: rgba(248,113,113,0.35); }
+  .action-tab.t-delete.active::after { background: rgba(248,113,113,0.07); }
+  .tab-icon {
+    width: 36px; height: 36px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; margin-bottom: 12px; position: relative; z-index: 1;
+  }
+  .t-create .tab-icon { background: var(--green-bg); color: var(--green); }
+  .t-read .tab-icon { background: var(--accent-glow); color: var(--accent2); }
+  .t-update .tab-icon { background: var(--amber-bg); color: var(--amber); }
+  .t-delete .tab-icon { background: var(--red-bg); color: var(--red); }
+  .tab-name { font-family: var(--font-display); font-size: 15px; font-weight: 600; position: relative; z-index: 1; }
+  .tab-desc { font-size: 12px; color: var(--text-muted); margin-top: 3px; position: relative; z-index: 1; }
+
+  /* PANEL */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .panel-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .panel-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+  .panel-body { padding: 24px; }
+
+  /* FORM */
+  .form-group { margin-bottom: 18px; }
+  .form-label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 8px; font-weight: 500; }
+  .form-input, .form-textarea, .form-select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 11px 14px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+    appearance: none;
+  }
+  .form-input:focus, .form-textarea:focus, .form-select:focus { border-color: var(--accent); }
+  .form-input::placeholder, .form-textarea::placeholder { color: var(--text-dim); }
+  .form-textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
+  .form-select { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237b7a8e' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+
+  /* RADIO GROUP */
+  .radio-group { display: flex; gap: 8px; flex-wrap: wrap; }
+  .radio-option { display: none; }
+  .radio-label {
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--font-mono);
+  }
+  .radio-option:checked + .radio-label {
+    background: var(--accent-glow);
+    border-color: rgba(124,106,245,0.4);
+    color: var(--accent2);
+  }
+
+  /* BUTTONS */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 22px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
+  }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: #6b5ae0; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(124,106,245,0.35); }
+  .btn-ghost { background: transparent; color: var(--text-muted); border-color: var(--border); }
+  .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+  .btn-danger { background: var(--red-bg); color: var(--red); border-color: rgba(248,113,113,0.3); }
+  .btn-danger:hover { background: rgba(248,113,113,0.2); }
+  .btn-success { background: var(--green-bg); color: var(--green); border-color: rgba(52,211,153,0.3); }
+  .btn-success:hover { background: rgba(52,211,153,0.2); }
+  .btn-amber { background: var(--amber-bg); color: var(--amber); border-color: rgba(251,191,36,0.3); }
+  .btn-amber:hover { background: rgba(251,191,36,0.2); }
+  .btn-row { display: flex; gap: 10px; margin-top: 8px; }
+
+  /* OUTPUT */
+  .output-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.7;
+    min-height: 60px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .output-box.success { border-color: rgba(52,211,153,0.3); background: rgba(52,211,153,0.05); color: var(--green); }
+  .output-box.error { border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.05); color: var(--red); }
+  .output-box.info { border-color: rgba(124,106,245,0.3); background: rgba(124,106,245,0.05); color: var(--accent2); }
+  .output-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); margin-bottom: 8px; font-weight: 500; }
+
+  /* FILE LIST */
+  .file-list { display: flex; flex-direction: column; gap: 8px; }
+  .file-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: all 0.15s;
+    cursor: default;
+  }
+  .file-item:hover { border-color: var(--border-hover); }
+  .file-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .file-name { font-family: var(--font-mono); font-size: 13px; font-weight: 500; flex: 1; }
+  .file-meta { font-size: 11px; color: var(--text-dim); }
+  .file-actions { display: flex; gap: 6px; }
+  .icon-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-muted); font-size: 12px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .icon-btn:hover { background: var(--surface3); color: var(--text); }
+
+  /* BADGE */
+  .badge {
+    display: inline-flex; align-items: center;
+    padding: 3px 8px; border-radius: 20px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600;
+  }
+  .badge-green { background: var(--green-bg); color: var(--green); }
+  .badge-amber { background: var(--amber-bg); color: var(--amber); }
+  .badge-red { background: var(--red-bg); color: var(--red); }
+  .badge-purple { background: var(--accent-glow); color: var(--accent2); }
+
+  /* DIVIDER */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+  /* STATS ROW */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .stat-icon { font-size: 20px; }
+  .stat-num { font-family: var(--font-display); font-size: 20px; font-weight: 700; line-height: 1; }
+  .stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  /* SECTIONS */
+  .section-hidden { display: none; }
+  .section-visible { display: block; }
+
+  /* TOAST */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    font-size: 13px;
+    z-index: 100;
+    display: flex; align-items: center; gap: 10px;
+    transform: translateY(80px); opacity: 0;
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-width: 320px;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.t-success { border-color: rgba(52,211,153,0.3); }
+  #toast.t-error { border-color: rgba(248,113,113,0.3); }
+  #toast .toast-icon { font-size: 16px; }
+
+  /* CONFIRM MODAL */
+  #modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+    backdrop-filter: blur(4px);
+  }
+  #modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    width: 380px;
+    transform: scale(0.95);
+    transition: transform 0.2s;
+  }
+  #modal-overlay.open .modal { transform: scale(1); }
+  .modal-title { font-family: var(--font-display); font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+  .modal-body { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin-bottom: 22px; }
+  .modal-filename { font-family: var(--font-mono); color: var(--red); font-weight: 500; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 99px; }
+</style>
+</head>
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+
+<div id="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">⚠️ Confirm Deletion</div>
+    <div class="modal-body">Are you sure you want to delete <span class="modal-filename" id="modal-fname"></span>? This action cannot be undone.</div>
+    <div class="btn-row">
+      <button class="btn btn-danger" onclick="confirmDelete()">Delete File</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast">
+  <span class="toast-icon" id="toast-icon"></span>
+  <span id="toast-msg"></span>
+</div>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">
+        <div class="logo-icon">🗂</div>
+        <div>
+          <div class="logo-text">FileVault</div>
+        </div>
+      </div>
+      <div class="logo-sub">Python File Manager</div>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-label">Operations</div>
+      <div class="nav-item active" onclick="switchSection('create', this)">
+        <span class="icon">✦</span> Create File
+      </div>
+      <div class="nav-item" onclick="switchSection('read', this)">
+        <span class="icon">◎</span> Read File
+      </div>
+      <div class="nav-item" onclick="switchSection('update', this)">
+        <span class="icon">⟳</span> Update File
+      </div>
+      <div class="nav-item" onclick="switchSection('delete', this)">
+        <span class="icon">⌫</span> Delete File
+      </div>
+
+      <hr class="divider"/>
+      <div class="nav-label">Workspace</div>
+      <div class="nav-item" onclick="switchSection('files', this)">
+        <span class="icon">▦</span> All Files
+        <span class="nav-badge" id="file-count-badge">0</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="storage-bar-wrap">
+        <div class="storage-label">
+          <span>Workspace</span>
+          <span id="storage-used">0 B</span>
+        </div>
+        <div class="storage-bar"><div class="storage-fill" id="storage-bar-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-label">Create File</div>
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input type="text" placeholder="Search files..." id="search-input" oninput="filterFiles()"/>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- STATS -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <span class="stat-icon">📄</span>
+          <div>
+            <div class="stat-num" id="stat-total">0</div>
+            <div class="stat-lbl">Total Files</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">📦</span>
+          <div>
+            <div class="stat-num" id="stat-size">0 B</div>
+            <div class="stat-lbl">Total Size</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">🕐</span>
+          <div>
+            <div class="stat-num" id="stat-ops">0</div>
+            <div class="stat-lbl">Operations</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CREATE -->
+      <section id="section-create" class="section-visible">
+        <div class="action-tabs">
+          <div class="action-tab t-create active" onclick="switchTabAction('create')">
+            <div class="tab-icon">✦</div>
+            <div class="tab-name">Create</div>
+            <div class="tab-desc">New file</div>
+          </div>
+          <div class="action-tab t-read" onclick="switchTabAction('read')">
+            <div class="tab-icon">◎</div>
+            <div class="tab-name">Read</div>
+            <div class="tab-desc">View content</div>
+          </div>
+          <div class="action-tab t-update" onclick="switchTabAction('update')">
+            <div class="tab-icon">⟳</div>
+            <div class="tab-name">Update</div>
+            <div class="tab-desc">Modify file</div>
+          </div>
+          <div class="action-tab t-delete" onclick="switchTabAction('delete')">
+            <div class="tab-icon">⌫</div>
+            <div class="tab-name">Delete</div>
+            <div class="tab-desc">Remove file</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-dot" style="background:var(--green)"></div>
+            <div class="panel-title">Create New File</div>
+            <span class="badge badge-green" style="margin-left:auto">CREATE</span>
+          </div>
+          <div class="panel-body">
+            <div class="form-group">
+              <label class="form-label">File Name</label>
+              <input class="form-input" id="create-name" placeholder="e.g. notes.txt, data.csv" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">File Content</label>
+              <textarea class="form-textarea" id="create-content" placeholder="Write your content here..."></textarea>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-success" onclick="createFile()">✦ Create File</button>
+              <button class="btn btn-ghost" onclick="clearForm('create')">Clear</button>
+            </div>
+            <hr class="divider"/>
+            <div class="output-label">Output</div>
+            <div class="output-box" id="create-output">Waiting for operation...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- READ -->
+      <section id="section-read" class="section-hidden">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-dot" style="background:var(--accent2)"></div>
+            <div class="panel-title">Read File Content</div>
+            <span class="badge badge-purple" style="margin-left:auto">READ</span>
+          </div>
+          <div class="panel-body">
+            <div class="form-group">
+              <label class="form-label">Select File</label>
+              <select class="form-select" id="read-select">
+                <option value="">— Choose a file —</option>
+              </select>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" onclick="readFile()">◎ Read File</button>
+            </div>
+            <hr class="divider"/>
+            <div class="output-label">File Content</div>
+            <div class="output-box info" id="read-output">Select a file above to view its content.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- UPDATE -->
+      <section id="section-update" class="section-hidden">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-dot" style="background:var(--amber)"></div>
+            <div class="panel-title">Update File</div>
+            <span class="badge badge-amber" style="margin-left:auto">UPDATE</span>
+          </div>
+          <div class="panel-body">
+            <div class="form-group">
+              <label class="form-label">Select File</label>
+              <select class="form-select" id="update-select" onchange="onUpdateFileSelect()">
+                <option value="">— Choose a file —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Operation</label>
+              <div class="radio-group">
+                <input type="radio" name="update-op" id="op-rename" value="rename" class="radio-option" checked onchange="onOpChange()"/>
+                <label class="radio-label" for="op-rename">Rename</label>
+                <input type="radio" name="update-op" id="op-append" value="append" class="radio-option" onchange="onOpChange()"/>
+                <label class="radio-label" for="op-append">Append</label>
+                <input type="radio" name="update-op" id="op-overwrite" value="overwrite" class="radio-option" onchange="onOpChange()"/>
+                <label class="radio-label" for="op-overwrite">Overwrite</label>
+              </div>
+            </div>
+            <div class="form-group" id="update-input-wrap">
+              <label class="form-label" id="update-input-label">New File Name</label>
+              <input class="form-input" id="update-input" placeholder="e.g. renamed.txt"/>
+            </div>
+            <div class="form-group section-hidden" id="update-content-wrap">
+              <label class="form-label" id="update-content-label">Content to Add</label>
+              <textarea class="form-textarea" id="update-content" placeholder="Enter content..."></textarea>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-amber" onclick="updateFile()">⟳ Apply Update</button>
+            </div>
+            <hr class="divider"/>
+            <div class="output-label">Output</div>
+            <div class="output-box" id="update-output">Waiting for operation...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DELETE -->
+      <section id="section-delete" class="section-hidden">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-dot" style="background:var(--red)"></div>
+            <div class="panel-title">Delete File</div>
+            <span class="badge badge-red" style="margin-left:auto">DELETE</span>
+          </div>
+          <div class="panel-body">
+            <div class="form-group">
+              <label class="form-label">Select File to Delete</label>
+              <select class="form-select" id="delete-select">
+                <option value="">— Choose a file —</option>
+              </select>
+            </div>
+            <div id="delete-preview" style="display:none; margin-bottom:18px;">
+              <div class="output-label">File Preview</div>
+              <div class="output-box error" id="delete-preview-content"></div>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-ghost" onclick="previewDeleteFile()">Preview Content</button>
+              <button class="btn btn-danger" onclick="promptDelete()">⌫ Delete File</button>
+            </div>
+            <hr class="divider"/>
+            <div class="output-label">Output</div>
+            <div class="output-box" id="delete-output">Select a file to delete.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ALL FILES -->
+      <section id="section-files" class="section-hidden">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-dot" style="background:var(--accent)"></div>
+            <div class="panel-title">All Files</div>
+            <span class="badge badge-purple" style="margin-left:auto" id="files-count-badge">0 files</span>
+          </div>
+          <div class="panel-body">
+            <div class="file-list" id="file-list-container">
+              <div style="text-align:center; padding: 32px; color: var(--text-dim);">
+                <div style="font-size:32px;margin-bottom:12px">🗂</div>
+                <div style="font-size:14px">No files yet. Create one to get started.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /content -->
+  </main>
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  const FILES = {}; // { name: { content, created, modified, size } }
+  let ops = 0;
+  let pendingDelete = null;
+
+  // ── Utilities ─────────────────────────────────────────────────────────────
+  function now() { return new Date().toLocaleTimeString(); }
+  function fmtSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+    return (bytes/1024/1024).toFixed(2) + ' MB';
+  }
+  function ext(name) {
+    const p = name.split('.');
+    return p.length > 1 ? p.pop().toLowerCase() : 'txt';
+  }
+  function fileColor(name) {
+    const e = ext(name);
+    const map = { txt:'#7c6af5', py:'#34d399', js:'#fbbf24', json:'#60a5fa', csv:'#f472b6', md:'#a78bfa', html:'#fb923c', css:'#38bdf8' };
+    return map[e] || '#7b7a8e';
+  }
+  function fileEmoji(name) {
+    const e = ext(name);
+    const m = { txt:'📄', py:'🐍', js:'📜', json:'📋', csv:'📊', md:'📝', html:'🌐', css:'🎨' };
+    return m[e] || '📄';
+  }
+
+  function showToast(msg, type='success') {
+    const t = document.getElementById('toast');
+    const icon = type === 'success' ? '✓' : '⚠';
+    document.getElementById('toast-icon').textContent = icon;
+    document.getElementById('toast-msg').textContent = msg;
+    t.className = `show t-${type}`;
+    setTimeout(() => { t.className = ''; }, 3000);
+  }
+
+  function setOutput(id, msg, type='') {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.className = 'output-box' + (type ? ' ' + type : '');
+  }
+
+  function incOps() {
+    ops++;
+    document.getElementById('stat-ops').textContent = ops;
+  }
+
+  function updateStats() {
+    const names = Object.keys(FILES);
+    document.getElementById('stat-total').textContent = names.length;
+    document.getElementById('file-count-badge').textContent = names.length;
+    document.getElementById('files-count-badge').textContent = names.length + ' file' + (names.length !== 1 ? 's' : '');
+    const total = names.reduce((s,n) => s + FILES[n].size, 0);
+    document.getElementById('stat-size').textContent = fmtSize(total);
+    document.getElementById('storage-used').textContent = fmtSize(total);
+    const pct = Math.min(100, (total / (1024*1024)) * 100);
+    document.getElementById('storage-bar-fill').style.width = Math.max(pct, names.length > 0 ? 4 : 0) + '%';
+  }
+
+  function refreshSelects() {
+    const names = Object.keys(FILES);
+    ['read-select','update-select','delete-select'].forEach(id => {
+      const sel = document.getElementById(id);
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">— Choose a file —</option>';
+      names.forEach(n => {
+        const o = document.createElement('option');
+        o.value = n; o.textContent = n;
+        sel.appendChild(o);
+      });
+      if (names.includes(cur)) sel.value = cur;
+    });
+  }
+
+  function renderFileList(filter='') {
+    const container = document.getElementById('file-list-container');
+    const names = Object.keys(FILES).filter(n => n.toLowerCase().includes(filter.toLowerCase()));
+    if (names.length === 0) {
+      container.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-dim)"><div style="font-size:32px;margin-bottom:12px">🗂</div><div style="font-size:14px">${filter ? 'No files match your search.' : 'No files yet. Create one to get started.'}</div></div>`;
+      return;
+    }
+    container.innerHTML = names.map(n => {
+      const f = FILES[n];
+      const color = fileColor(n);
+      return `<div class="file-item">
+        <div class="file-icon" style="background:${color}18; color:${color}">${fileEmoji(n)}</div>
+        <div style="flex:1; min-width:0">
+          <div class="file-name">${n}</div>
+          <div class="file-meta">${fmtSize(f.size)} · Modified ${f.modified}</div>
+        </div>
+        <div class="file-actions">
+          <button class="icon-btn" title="Read" onclick="quickRead('${n}')">◎</button>
+          <button class="icon-btn" title="Delete" onclick="quickDeletePrompt('${n}')" style="color:var(--red)">⌫</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
+  const sections = ['create','read','update','delete','files'];
+  const labels = { create:'Create File', read:'Read File', update:'Update File', delete:'Delete File', files:'All Files' };
+
+  function switchSection(name, el) {
+    sections.forEach(s => {
+      document.getElementById('section-'+s).className = s === name ? 'section-visible' : 'section-hidden';
+    });
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    if (el) el.classList.add('active');
+    document.getElementById('topbar-label').textContent = labels[name] || name;
+    if (name === 'files') renderFileList();
+  }
+
+  function switchTabAction(name) {
+    document.querySelectorAll('.action-tab').forEach(t => t.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    switchSection(name);
+    document.querySelectorAll('.nav-item').forEach((it, i) => {
+      it.classList.toggle('active', ['create','read','update','delete'][i] === name);
+    });
+  }
+
+  // ── CRUD ──────────────────────────────────────────────────────────────────
+  function createFile() {
+    const name = document.getElementById('create-name').value.trim();
+    const content = document.getElementById('create-content').value;
+    if (!name) { setOutput('create-output','⚠ Please enter a file name.','error'); showToast('File name is required.','error'); return; }
+    if (FILES[name]) { setOutput('create-output',`⚠ Error: "${name}" already exists.`,'error'); showToast('File already exists.','error'); return; }
+    FILES[name] = { content, size: new Blob([content]).size, created: now(), modified: now() };
+    setOutput('create-output', `✓ File "${name}" created successfully.\n\nSize: ${fmtSize(FILES[name].size)}\nCreated: ${FILES[name].created}`, 'success');
+    showToast(`"${name}" created!`);
+    incOps(); updateStats(); refreshSelects(); renderFileList();
+    document.getElementById('create-name').value = '';
+    document.getElementById('create-content').value = '';
+  }
+
+  function readFile() {
+    const name = document.getElementById('read-select').value;
+    if (!name) { setOutput('read-output','⚠ Please select a file.','error'); return; }
+    const f = FILES[name];
+    setOutput('read-output', f.content || '(Empty file)', 'info');
+    incOps();
+  }
+
+  function quickRead(name) {
+    switchSection('read', document.querySelectorAll('.nav-item')[1]);
+    setTimeout(() => {
+      document.getElementById('read-select').value = name;
+      readFile();
+    }, 50);
+  }
+
+  function onOpChange() {
+    const op = document.querySelector('input[name="update-op"]:checked').value;
+    const inputWrap = document.getElementById('update-input-wrap');
+    const contentWrap = document.getElementById('update-content-wrap');
+    const inputLabel = document.getElementById('update-input-label');
+    const contentLabel = document.getElementById('update-content-label');
+    if (op === 'rename') {
+      inputWrap.style.display = 'block';
+      contentWrap.className = 'form-group section-hidden';
+      inputLabel.textContent = 'New File Name';
+      document.getElementById('update-input').placeholder = 'e.g. renamed.txt';
+    } else if (op === 'append') {
+      inputWrap.style.display = 'none';
+      contentWrap.className = 'form-group';
+      contentLabel.textContent = 'Content to Append';
+      document.getElementById('update-content').placeholder = 'Text to add at end of file...';
+    } else {
+      inputWrap.style.display = 'none';
+      contentWrap.className = 'form-group';
+      contentLabel.textContent = 'New Content (Overwrites)';
+      document.getElementById('update-content').placeholder = 'This will replace all existing content...';
+    }
+  }
+
+  function onUpdateFileSelect() {
+    const name = document.getElementById('update-select').value;
+    if (name && FILES[name]) {
+      document.getElementById('update-content').value = FILES[name].content;
+    }
+  }
+
+  function updateFile() {
+    const name = document.getElementById('update-select').value;
+    if (!name) { setOutput('update-output','⚠ Please select a file.','error'); return; }
+    const op = document.querySelector('input[name="update-op"]:checked').value;
+    if (op === 'rename') {
+      const newName = document.getElementById('update-input').value.trim();
+      if (!newName) { setOutput('update-output','⚠ Please enter a new file name.','error'); return; }
+      if (FILES[newName]) { setOutput('update-output',`⚠ "${newName}" already exists.`,'error'); return; }
+      FILES[newName] = { ...FILES[name], modified: now() };
+      delete FILES[name];
+      setOutput('update-output', `✓ Renamed "${name}" → "${newName}"\nModified: ${FILES[newName].modified}`, 'success');
+      showToast(`Renamed to "${newName}"`);
+    } else if (op === 'append') {
+      const data = document.getElementById('update-content').value;
+      FILES[name].content += '\n' + data;
+      FILES[name].size = new Blob([FILES[name].content]).size;
+      FILES[name].modified = now();
+      setOutput('update-output', `✓ Content appended to "${name}".\nNew size: ${fmtSize(FILES[name].size)}`, 'success');
+      showToast(`"${name}" updated!`);
+    } else {
+      const data = document.getElementById('update-content').value;
+      FILES[name].content = data;
+      FILES[name].size = new Blob([data]).size;
+      FILES[name].modified = now();
+      setOutput('update-output', `✓ "${name}" overwritten.\nNew size: ${fmtSize(FILES[name].size)}`, 'success');
+      showToast(`"${name}" overwritten!`);
+    }
+    incOps(); updateStats(); refreshSelects(); renderFileList();
+  }
+
+  function promptDelete() {
+    const name = document.getElementById('delete-select').value;
+    if (!name) { setOutput('delete-output','⚠ Please select a file.','error'); return; }
+    pendingDelete = name;
+    document.getElementById('modal-fname').textContent = name;
+    document.getElementById('modal-overlay').classList.add('open');
+  }
+
+  function quickDeletePrompt(name) {
+    pendingDelete = name;
+    document.getElementById('modal-fname').textContent = name;
+    document.getElementById('modal-overlay').classList.add('open');
+  }
+
+  function previewDeleteFile() {
+    const name = document.getElementById('delete-select').value;
+    if (!name) return;
+    const preview = document.getElementById('delete-preview');
+    document.getElementById('delete-preview-content').textContent = FILES[name].content || '(Empty file)';
+    preview.style.display = 'block';
+  }
+
+  function confirmDelete() {
+    if (!pendingDelete) return;
+    const name = pendingDelete;
+    delete FILES[name];
+    setOutput('delete-output', `✓ "${name}" deleted successfully.`, 'success');
+    showToast(`"${name}" deleted.`);
+    document.getElementById('delete-preview').style.display = 'none';
+    closeModal();
+    incOps(); updateStats(); refreshSelects(); renderFileList();
+    pendingDelete = null;
+  }
+
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+
+  document.getElementById('modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  function filterFiles() {
+    const q = document.getElementById('search-input').value;
+    renderFileList(q);
+  }
+
+  function clearForm(type) {
+    if (type === 'create') {
+      document.getElementById('create-name').value = '';
+      document.getElementById('create-content').value = '';
+      setOutput('create-output','Waiting for operation...');
+    }
+  }
+
+  // ── Seed some demo files ───────────────────────────────────────────────────
+  const demos = [
+    ['readme.md', '# FileVault Demo\nThis is a sample markdown file.\nCreated with FileVault.'],
+    ['config.json', '{\n  "version": "1.0.0",\n  "theme": "dark",\n  "author": "FileVault"\n}'],
+    ['notes.txt', 'Meeting notes:\n- Review Python CRUD module\n- Add error handling\n- Deploy to staging'],
+  ];
+  demos.forEach(([n,c]) => {
+    FILES[n] = { content: c, size: new Blob([c]).size, created: now(), modified: now() };
+  });
+  updateStats(); refreshSelects(); renderFileList();
+</script>
+</body>
+</html>
